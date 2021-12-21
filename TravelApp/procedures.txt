@@ -1,0 +1,65 @@
+CREATE DEFINER=`root`@`localhost` PROCEDURE `add_description`(IN geonameid INT, IN descrip varchar(55), IN rating INT)
+BEGIN
+INSERT into geonames.usersdescriptions
+values(default, geonameid, descrip, rating, curdate());
+END
+
+
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `get_all_countries`()
+BEGIN
+SELECT country FROM countries
+ORDER BY country ASC;
+END
+
+
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `get_description`(IN geoid INT)
+BEGIN
+SELECT geonameid, description, rating, date
+FROM geonames.usersdescriptions
+WHERE geonameid = geoid
+ORDER BY date desc;
+END
+
+
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `radial_search`(IN currLat DECIMAL(10,7), IN currLng DECIMAL(10,7), IN minLat DECIMAL(10,7), IN maxLat DECIMAL(10,7), IN minLng DECIMAL(10,7), IN maxLng DECIMAL(10,7),IN userfcl varchar(20), IN radius INT, IN country varchar(50))
+BEGIN
+SELECT locations.geonameid, name, latitude, longitude, alternateName, AVG(rating) as avgRate, fclass, meaning,
+(6371 * acos(cos(radians(currLat)) * cos(radians(latitude)) * cos(radians(longitude)-radians(currLng)) + sin(radians(currLat)) * sin(radians(latitude))))
+AS distance
+FROM locations INNER JOIN classandcodes ON (locations.fcode = classandcodes.fcode)
+INNER JOIN countries ON (countries.country = country)
+LEFT JOIN usersdescriptions ON (locations.geonameid=usersdescriptions.geonameid)
+LEFT JOIN alternatename ON (locations.geonameid=alternatename.geonameid)
+WHERE (latitude BETWEEN minLat AND maxLat) 
+AND (longitude BETWEEN minLng AND maxLng) 
+AND userfcl LIKE CONCAT('%',fclass,'%')
+AND countries.iso = locations.country
+GROUP BY geonameid
+HAVING distance < radius
+ORDER BY distance ASC
+LIMIT 500;
+END
+
+
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `radial_search_rating`(IN currLat DECIMAL(10,7), IN currLng DECIMAL(10,7), IN minLat DECIMAL(10,7), IN maxLat DECIMAL(10,7), IN minLng DECIMAL(10,7), IN maxLng DECIMAL(10,7), IN userfcl varchar(20), IN radius INT, IN score INT, IN country varchar(50))
+BEGIN
+SELECT locations.geonameid, name, latitude, longitude, alternateName, AVG(rating) AS avgRate, fclass, meaning,
+(6371 * acos(cos(radians(currLat)) * cos(radians(latitude)) * cos(radians(longitude)-radians(currLng)) + sin(radians(currLat)) * sin(radians(latitude))))
+AS distance
+FROM locations INNER JOIN classandcodes ON (locations.fcode = classandcodes.fcode)
+INNER JOIN countries ON (locations.country = countries.iso)
+LEFT JOIN usersdescriptions ON (locations.geonameid=usersdescriptions.geonameid)
+LEFT JOIN alternatename ON (locations.geonameid=alternatename.geonameid)
+WHERE (latitude BETWEEN minLat AND maxLat) 
+AND (longitude BETWEEN minLng AND maxLng) 
+AND userfcl LIKE CONCAT('%',fclass,'%')
+AND locations.country IN (select ISO from countries where Country = country) 
+GROUP BY geonameid
+HAVING distance <= radius AND avgRate >= score
+ORDER BY distance ASC
+LIMIT 500;
+END 
